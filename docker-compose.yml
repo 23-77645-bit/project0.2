@@ -1,0 +1,83 @@
+version: '3.9'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    container_name: student-attendance-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: student-attendance-backend
+    environment:
+      - FLASK_ENV=production
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=attendance_db
+      - DB_USER=attendance_user
+      - DB_PASSWORD=attendance_pass
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
+      - QR_SECRET_KEY=batstateu_qr_secret
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    networks:
+      - app-net
+
+  db:
+    image: mysql:8.0
+    container_name: student-attendance-db
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=attendance_db
+      - MYSQL_USER=attendance_user
+      - MYSQL_PASSWORD=attendance_pass
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - app-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: student-attendance-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+    networks:
+      - app-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: student-attendance-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  db-data:
