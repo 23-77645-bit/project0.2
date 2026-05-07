@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendance-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: attendance-backend
+  template:
+    metadata:
+      labels:
+        app: attendance-backend
+    spec:
+      containers:
+        - name: backend
+          image: yourdockerhub/student-attendance-backend:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: mysql-service
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: attendance_db
+            - name: DB_USER
+              value: attendance_user
+            - name: DB_PASSWORD
+              value: attendance_pass
+            - name: ADMIN_USERNAME
+              value: admin
+            - name: ADMIN_PASSWORD
+              value: admin123
+            - name: QR_SECRET_KEY
+              value: batstateu_qr_secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-backend-service
+spec:
+  selector:
+    app: attendance-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: ClusterIP
