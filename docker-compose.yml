@@ -1,6 +1,14 @@
 version: '3.9'
 
+# ============================================================
+#  QR Attendance System — Docker Compose
+#  🔒 All secrets loaded from .env — never hardcoded
+#  Run: cp .env.example .env  then fill in your values
+# ============================================================
+
 services:
+
+  # ── Frontend ─────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -11,7 +19,9 @@ services:
       - backend
     networks:
       - app-net
+    restart: unless-stopped
 
+  # ── Backend ──────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -20,60 +30,77 @@ services:
       - FLASK_ENV=production
       - DB_HOST=db
       - DB_PORT=3306
-      - DB_NAME=attendance_db
-      - DB_USER=attendance_user
-      - DB_PASSWORD=attendance_pass
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=admin123
-      - QR_SECRET_KEY=batstateu_qr_secret
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - QR_SECRET_KEY=${QR_SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
     ports:
       - "5000:5000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-net
+    restart: unless-stopped
 
+  # ── Database ─────────────────────────────────────────────
   db:
     image: mysql:8.0
     container_name: student-attendance-db
     command: --default-authentication-plugin=mysql_native_password
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpass
-      - MYSQL_DATABASE=attendance_db
-      - MYSQL_USER=attendance_user
-      - MYSQL_PASSWORD=attendance_pass
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
     volumes:
       - db-data:/var/lib/mysql
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     networks:
       - app-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
+  # ── Prometheus ───────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: student-attendance-prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on:
       - backend
     networks:
       - app-net
+    restart: unless-stopped
 
+  # ── Grafana ──────────────────────────────────────────────
   grafana:
     image: grafana/grafana:latest
     container_name: student-attendance-grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USERNAME}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
     ports:
       - "3001:3000"
     depends_on:
       - prometheus
     networks:
       - app-net
+    restart: unless-stopped
 
 networks:
   app-net:
@@ -81,3 +108,4 @@ networks:
 
 volumes:
   db-data:
+  grafana-data:
