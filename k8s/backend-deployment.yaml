@@ -1,7 +1,23 @@
+# ============================================================
+#  Kubernetes — Backend Deployment + Service
+#  🔒 CIA: Confidentiality — secrets from K8s Secret, not plain env
+#
+#  Before applying, create the secret:
+#  kubectl create secret generic attendance-secrets \
+#    --from-literal=db-password=YOUR_PASSWORD \
+#    --from-literal=db-root-password=YOUR_ROOT_PASSWORD \
+#    --from-literal=admin-username=YOUR_ADMIN \
+#    --from-literal=admin-password=YOUR_ADMIN_PASSWORD \
+#    --from-literal=qr-secret-key=YOUR_QR_SECRET \
+#    --from-literal=jwt-secret=YOUR_JWT_SECRET
+# ============================================================
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: attendance-backend
+  labels:
+    app: attendance-backend
 spec:
   replicas: 2
   selector:
@@ -26,14 +42,47 @@ spec:
               value: attendance_db
             - name: DB_USER
               value: attendance_user
+            - name: FRONTEND_ORIGIN
+              value: "http://localhost:3000"
+            # 🔒 CIA: Confidentiality — all secrets from K8s Secret, never plain text
             - name: DB_PASSWORD
-              value: attendance_pass
+              valueFrom:
+                secretKeyRef:
+                  name: attendance-secrets
+                  key: db-password
             - name: ADMIN_USERNAME
-              value: admin
+              valueFrom:
+                secretKeyRef:
+                  name: attendance-secrets
+                  key: admin-username
             - name: ADMIN_PASSWORD
-              value: admin123
+              valueFrom:
+                secretKeyRef:
+                  name: attendance-secrets
+                  key: admin-password
             - name: QR_SECRET_KEY
-              value: batstateu_qr_secret
+              valueFrom:
+                secretKeyRef:
+                  name: attendance-secrets
+                  key: qr-secret-key
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: attendance-secrets
+                  key: jwt-secret
+          # ⚡ CIA: Availability — liveness and readiness probes
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "100m"
@@ -41,6 +90,7 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
+
 ---
 apiVersion: v1
 kind: Service
@@ -53,4 +103,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 5000
-  type: ClusterIP
+  type: ClusterIP                  # 🔒 CIA: Confidentiality — internal only, not exposed
